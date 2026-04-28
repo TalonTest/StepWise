@@ -166,6 +166,7 @@ export function parseStepLine(line: string): ParsedStep | null {
 // ─── Scenario Outline matching ────────────────────────────────────────────────
 
 const OUTLINE_PLACEHOLDER_RE = /<[^>]+>/g;
+const HAS_OUTLINE_PLACEHOLDER = /<[^>]+>/;
 
 /**
  * Match a Scenario Outline step whose text contains `<placeholder>` tokens.
@@ -206,9 +207,7 @@ export function resolveStep(
   stepText: string,
   definitions: StepDefinition[],
 ): StepDefinition | undefined {
-  if (OUTLINE_PLACEHOLDER_RE.test(stepText)) {
-    // Reset lastIndex after the stateful test() call on a /g regex
-    OUTLINE_PLACEHOLDER_RE.lastIndex = 0;
+  if (HAS_OUTLINE_PLACEHOLDER.test(stepText)) {
     return matchOutlineStep(stepText, definitions);
   }
   return matchStep(stepText, definitions);
