@@ -1,5 +1,6 @@
 // @ts-check
 const esbuild = require('esbuild');
+const { version } = require('./package.json');
 
 const isDev = process.argv.includes('--watch');
 
@@ -25,6 +26,7 @@ async function main() {
     ...shared,
     entryPoints: ['server/src/server.ts'],
     outfile: 'out/server/server.js',
+    define: { __VERSION__: JSON.stringify(version) },
   });
 
   if (isDev) {
