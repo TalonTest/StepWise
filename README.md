@@ -1,5 +1,7 @@
 # Stepwise — BDD/Gherkin Language Support for VS Code
 
+[![CI](https://img.shields.io/github/actions/workflow/status/TalonTest/StepWise/ci.yml?style=flat-square&label=CI)](https://github.com/TalonTest/StepWise/actions/workflows/ci.yml)
+
 A VS Code extension that brings PyCharm-style BDD support to `.feature` files backed by [pytest-bdd](https://pytest-bdd.readthedocs.io/) step definitions.
 
 ## Features
