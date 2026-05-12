@@ -175,13 +175,15 @@ function findPython(configured?: string): string {
 }
 
 /** Absolute path to the bundled step_parser.py. */
-function getParserScriptPath(): string {
+function getParserScriptPath(): string | undefined {
   if (extensionPath) {
     return path.join(extensionPath, 'server', 'python', 'step_parser.py');
   }
-  // Fallback for environments where extensionPath wasn't passed (e.g. tests).
-  // Compiled output lives at out/server/server.js, two levels up from the root.
-  return path.join(__dirname, '..', '..', 'server', 'python', 'step_parser.py');
+  connection.console.error(
+    '[stepwise] extensionPath was not provided in initializationOptions; ' +
+    'cannot locate step_parser.py. The language client must pass extensionPath.'
+  );
+  return undefined;
 }
 
 /**
@@ -196,6 +198,11 @@ function runStepParser(pythonFiles: string[], pythonPath?: string): Promise<Step
     }
 
     const scriptPath = getParserScriptPath();
+
+    if (!scriptPath) {
+      resolve([]);
+      return;
+    }
 
     if (!fs.existsSync(scriptPath)) {
       connection.console.warn(`[stepwise] Parser script not found at: ${scriptPath}`);
