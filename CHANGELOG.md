@@ -7,13 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-12
+
 ### Added
 - Hover support for matched step lines — shows the decorator, pattern, and source `file:line` of the matching definition
+- Quick fix code action to generate a step definition stub for unresolved Gherkin steps
+
+### Fixed
+- Inconsistent "Stepwise" / "StepWise" capitalization across the repo and marketplace metadata
+
+## [0.4.0] - 2026-05-12
+
+### Added
 - Gallery banner and VS Code Marketplace branding
 - Extension keywords for improved discoverability
 - GitHub Actions CI pipeline with typecheck, Jest, and pytest
 - LSP request handler tests
 - Informational log when the repository has no step definitions
+- Release pipeline that publishes to the Marketplace and creates a GitHub Release on `v*` tag push
+- This CHANGELOG
 
 ### Changed
 - License updated to Apache 2.0
@@ -52,7 +64,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Formatter not recognized in marketplace installs: bundled server dependencies with esbuild so the extension is fully self-contained ([#2](https://github.com/ntibbenlembke/stepwise/issues/2))
 
-[Unreleased]: https://github.com/ntibbenlembke/stepwise/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ntibbenlembke/stepwise/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ntibbenlembke/stepwise/releases/tag/v0.1.0
