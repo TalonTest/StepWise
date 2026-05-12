@@ -11,6 +11,7 @@ A VS Code extension that brings PyCharm-style BDD support to `.feature` files ba
 | **Syntax highlighting** | Keywords, tags, comments, parameters, docstrings, data tables |
 | **Diagnostics** | Warning squiggle on every step that has no matching definition |
 | **Go-to-definition** | `F12` / Ctrl+Click on a step line jumps to the Python function |
+| **Hover** | Hovering a matched step shows its decorator, pattern, and source file:line |
 | **Completion** | Step suggestions as you type after `Given` / `When` / `Then` |
 | **Formatting** | Auto-format `.feature` files with `Shift+Alt+F` |
 | **Scenario Outline support** | `<placeholder>` steps are matched correctly without false warnings |

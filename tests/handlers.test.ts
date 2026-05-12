@@ -1,9 +1,10 @@
-import { DiagnosticSeverity, CompletionItemKind } from 'vscode-languageserver/node';
+import { DiagnosticSeverity, CompletionItemKind, MarkupKind } from 'vscode-languageserver/node';
 
 import {
   buildCompletionItems,
   computeDiagnostics,
   resolveDefinitionLink,
+  resolveHover,
 } from '../server/src/handlers';
 import { StepDefinition } from '../server/src/stepMatcher';
 
@@ -179,5 +180,82 @@ describe('resolveDefinitionLink', () => {
     const d = def('x', { line: 0 });
     const [link] = resolveDefinitionLink('  Given x', 0, [d], fakeUri)!;
     expect(link.targetRange.start.line).toBe(0);
+  });
+});
+
+// ── resolveHover ─────────────────────────────────────────────────────────────
+
+describe('resolveHover', () => {
+  it('returns null for non-step lines', () => {
+    expect(resolveHover('Feature: x', 0, [def('x')])).toBeNull();
+    expect(resolveHover('  Scenario: s', 1, [def('x')])).toBeNull();
+    expect(resolveHover('', 0, [def('x')])).toBeNull();
+  });
+
+  it('returns null when no definition matches', () => {
+    expect(resolveHover('  Given nothing matches', 3, [])).toBeNull();
+    expect(resolveHover('  When something', 0, [def('other')])).toBeNull();
+  });
+
+  it('returns markdown content listing decorator, pattern, and source location', () => {
+    const d = def('I click submit', {
+      file: '/p/auth/steps_login.py',
+      line: 17,
+      decorator: 'when',
+    });
+    const hover = resolveHover('  When I click submit', 4, [d]);
+    expect(hover).not.toBeNull();
+    const contents = hover!.contents as { kind: string; value: string };
+    expect(contents.kind).toBe(MarkupKind.Markdown);
+    expect(contents.value).toContain('@when');
+    expect(contents.value).toContain('I click submit');
+    expect(contents.value).toContain('steps_login.py:17');
+    // Source file should be shown by basename only — no absolute path
+    expect(contents.value).not.toContain('/p/auth/');
+  });
+
+  it('sets the hover range to cover just the step text', () => {
+    const d = def('I click submit');
+    const hover = resolveHover('  When I click submit', 7, [d])!;
+    expect(hover.range).toEqual({
+      start: { line: 7, character: 7 },
+      end:   { line: 7, character: 7 + 'I click submit'.length },
+    });
+  });
+
+  it('marks regex definitions and includes a prettified form', () => {
+    // Using a literal-only pattern so the current matcher resolves the step
+    // (regex-pattern matching isn't yet wired through resolveStep), while
+    // isRegex: true still exercises the hover's regex-formatting branch.
+    const d = def('I have five items', {
+      isRegex: true,
+      file: '/p/steps.py',
+      line: 3,
+    });
+    const hover = resolveHover('  Given I have five items', 0, [d])!;
+    const value = (hover.contents as { value: string }).value;
+    expect(value).toMatch(/regex/);
+    // Raw pattern preserved in the code fence
+    expect(value).toContain('I have five items');
+    // Prettified form surfaced alongside the raw pattern
+    expect(value).toMatch(/prettified/i);
+  });
+
+  it('does not tag non-regex definitions as regex', () => {
+    const d = def('I have {count:d} items');
+    const hover = resolveHover('  Given I have 5 items', 0, [d])!;
+    const value = (hover.contents as { value: string }).value;
+    expect(value).not.toMatch(/regex/);
+    expect(value).toContain('I have {count:d} items');
+  });
+
+  it('resolves Scenario Outline placeholder steps to the matching definition', () => {
+    const d = def('I have {count:d} items in my cart', {
+      file: '/p/steps.py',
+      line: 9,
+    });
+    const hover = resolveHover('    Given I have <count> items in my cart', 5, [d]);
+    expect(hover).not.toBeNull();
+    expect((hover!.contents as { value: string }).value).toContain('I have {count:d} items in my cart');
   });
 });

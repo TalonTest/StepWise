@@ -27,6 +27,8 @@ import {
   CompletionItem,
   TextDocumentPositionParams,
   DefinitionParams,
+  Hover,
+  HoverParams,
   LocationLink,
   WatchKind,
   SemanticTokens,
@@ -49,6 +51,7 @@ import {
   computeDiagnostics,
   pathToUri,
   resolveDefinitionLink,
+  resolveHover,
 } from './handlers';
 
 import { formatDocument } from './formatter';
@@ -322,6 +325,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         triggerCharacters: [' '],
       },
       definitionProvider: true,
+      hoverProvider: true,
       semanticTokensProvider: {
         legend: TOKEN_LEGEND,
         range: false,
@@ -393,6 +397,20 @@ connection.onDefinition((params: DefinitionParams): LocationLink[] | null => {
   });
 
   return resolveDefinitionLink(lineText, params.position.line, stepDefinitions, pathToUri);
+});
+
+// ─── Hover ────────────────────────────────────────────────────────────────────
+
+connection.onHover((params: HoverParams): Hover | null => {
+  const doc = documents.get(params.textDocument.uri);
+  if (!doc || !doc.uri.endsWith('.feature')) return null;
+
+  const lineText = doc.getText({
+    start: { line: params.position.line, character: 0 },
+    end: { line: params.position.line, character: Number.MAX_SAFE_INTEGER },
+  });
+
+  return resolveHover(lineText, params.position.line, stepDefinitions);
 });
 
 // ─── Semantic tokens ──────────────────────────────────────────────────────────

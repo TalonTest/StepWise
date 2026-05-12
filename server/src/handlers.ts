@@ -12,7 +12,9 @@ import {
   CompletionItemKind,
   Diagnostic,
   DiagnosticSeverity,
+  Hover,
   LocationLink,
+  MarkupKind,
   Range,
 } from 'vscode-languageserver/node';
 
@@ -97,6 +99,49 @@ export function buildCompletionItems(
       insertText: displayLabel,
     };
   });
+}
+
+/**
+ * Build a Hover describing the matched definition for the step on `lineText`,
+ * or null if the line isn't a step or no definition matches.
+ *
+ * The hover content lists the decorator, the pattern (raw plus a prettified
+ * form for regex definitions), and the file:line where the definition lives.
+ * `range` covers just the step text so the editor stops showing the tooltip
+ * when the cursor leaves the step.
+ */
+export function resolveHover(
+  lineText: string,
+  line: number,
+  stepDefinitions: StepDefinition[],
+): Hover | null {
+  const parsed = parseStepLine(lineText);
+  if (!parsed) return null;
+
+  const def = resolveStep(parsed.text, stepDefinitions);
+  if (!def) return null;
+
+  const basename = path.basename(def.file);
+  const decoratorLabel = `@${def.decorator}`;
+  const patternBlock = def.isRegex
+    ? `\`\`\`regex\n${def.pattern}\n\`\`\`\n_prettified:_ \`${prettifyRegexPattern(def.pattern)}\``
+    : `\`\`\`\n${def.pattern}\n\`\`\``;
+  const kindLabel = def.isRegex ? ' *(regex)*' : '';
+
+  const value =
+    `**${decoratorLabel}**${kindLabel}\n\n` +
+    `${patternBlock}\n\n` +
+    `*Defined in ${basename}:${def.line}*`;
+
+  const range: Range = {
+    start: { line, character: parsed.textStart },
+    end:   { line, character: parsed.textStart + parsed.text.length },
+  };
+
+  return {
+    contents: { kind: MarkupKind.Markdown, value },
+    range,
+  };
 }
 
 /**

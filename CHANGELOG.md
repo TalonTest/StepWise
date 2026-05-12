@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Hover support for matched step lines — shows the decorator, pattern, and source `file:line` of the matching definition
 - Gallery banner and VS Code Marketplace branding
 - Extension keywords for improved discoverability
 - GitHub Actions CI pipeline with typecheck, Jest, and pytest
