@@ -1,3 +1,5 @@
+declare const __VERSION__: string;
+
 /**
  * server.ts — Stepwise LSP server
  *
@@ -353,7 +355,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
     },
     serverInfo: {
       name: 'stepwise',
-      version: '0.1.0',
+      version: __VERSION__,
     },
   };
 
