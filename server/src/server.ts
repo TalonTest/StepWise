@@ -19,19 +19,15 @@ import * as cp from 'child_process';
 import {
   createConnection,
   TextDocuments,
-  Diagnostic,
-  DiagnosticSeverity,
   ProposedFeatures,
   InitializeParams,
   InitializeResult,
   TextDocumentSyncKind,
   DidChangeWatchedFilesNotification,
   CompletionItem,
-  CompletionItemKind,
   TextDocumentPositionParams,
   DefinitionParams,
   LocationLink,
-  Range,
   WatchKind,
   SemanticTokens,
   SemanticTokensParams,
@@ -46,9 +42,14 @@ import {
   StepDefinition,
   resolveStep,
   parseStepLine,
-  filterDefinitions,
-  prettifyRegexPattern,
 } from './stepMatcher';
+
+import {
+  buildCompletionItems,
+  computeDiagnostics,
+  pathToUri,
+  resolveDefinitionLink,
+} from './handlers';
 
 import { formatDocument } from './formatter';
 
@@ -103,14 +104,6 @@ function uriToPath(uri: string): string {
     // Fallback: strip scheme manually
     return uri.replace(/^file:\/\//, '');
   }
-}
-
-/** Convert a local file-system path to a `file://` URI. */
-function pathToUri(filePath: string): string {
-  if (process.platform === 'win32') {
-    return 'file:///' + filePath.replace(/\\/g, '/');
-  }
-  return 'file://' + filePath;
 }
 
 // ─── File discovery ────────────────────────────────────────────────────────────
@@ -298,32 +291,7 @@ async function refreshStepDefinitions(): Promise<void> {
 
 function validateDocument(doc: TextDocument): void {
   if (!doc.uri.endsWith('.feature')) return;
-
-  const diagnostics: Diagnostic[] = [];
-  const text = doc.getText();
-  const lines = text.split('\n');
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const parsed = parseStepLine(line);
-    if (!parsed) continue;
-
-    const match = resolveStep(parsed.text, stepDefinitions);
-    if (!match) {
-      const range: Range = {
-        start: { line: i, character: parsed.keywordStart },
-        end: { line: i, character: line.trimEnd().length },
-      };
-      diagnostics.push({
-        severity: DiagnosticSeverity.Warning,
-        range,
-        message: `No matching step definition found for: "${parsed.text}"`,
-        source: 'stepwise',
-        code: 'no-step-definition',
-      });
-    }
-  }
-
+  const diagnostics = computeDiagnostics(doc.getText(), stepDefinitions);
   connection.sendDiagnostics({ uri: doc.uri, diagnostics });
 }
 
@@ -419,35 +387,12 @@ connection.onDefinition((params: DefinitionParams): LocationLink[] | null => {
   const doc = documents.get(params.textDocument.uri);
   if (!doc) return null;
 
-  // Get the full text of the line at the cursor
   const lineText = doc.getText({
     start: { line: params.position.line, character: 0 },
     end: { line: params.position.line, character: Number.MAX_SAFE_INTEGER },
   });
 
-  const parsed = parseStepLine(lineText);
-  if (!parsed) return null;
-
-  const def = resolveStep(parsed.text, stepDefinitions);
-  if (!def) return null;
-
-  // Highlight the entire step phrase (everything after the keyword) when
-  // the user Ctrl+hovers or Ctrl+clicks, not just the word under the cursor.
-  const originSelectionRange: Range = {
-    start: { line: params.position.line, character: parsed.textStart },
-    end:   { line: params.position.line, character: parsed.textStart + parsed.text.length },
-  };
-
-  // line in StepDefinition is 1-based; LSP uses 0-based
-  const targetLine = Math.max(0, def.line - 1);
-  const targetPos = { line: targetLine, character: 0 };
-
-  return [{
-    originSelectionRange,
-    targetUri: pathToUri(def.file),
-    targetRange: { start: targetPos, end: targetPos },
-    targetSelectionRange: { start: targetPos, end: targetPos },
-  }];
+  return resolveDefinitionLink(lineText, params.position.line, stepDefinitions, pathToUri);
 });
 
 // ─── Semantic tokens ──────────────────────────────────────────────────────────
@@ -498,39 +443,12 @@ connection.onCompletion((params: TextDocumentPositionParams): CompletionItem[] =
   const doc = documents.get(params.textDocument.uri);
   if (!doc) return [];
 
-  // Only look at what's been typed up to the cursor on this line
   const linePrefix = doc.getText({
     start: { line: params.position.line, character: 0 },
     end: params.position,
   });
 
-  // Must be on a step line  (Given/When/Then/And/But …)
-  const kwMatch = /^\s*(?:Given|When|Then|And|But)\s+(.*)/i.exec(linePrefix);
-  if (!kwMatch) return [];
-
-  const typed = kwMatch[1]; // text the user has typed so far after the keyword
-  const candidates = filterDefinitions(typed, stepDefinitions, 60);
-
-  return candidates.map((def, index) => {
-    const basename = path.basename(def.file);
-    // Regex patterns are displayed with cleaned-up labels; cfparse/plain
-    // patterns are shown as-is.
-    const displayLabel = def.isRegex ? prettifyRegexPattern(def.pattern) : def.pattern;
-    const detailTag    = def.isRegex ? 'regex · ' : '';
-    return {
-      label: displayLabel,
-      kind: CompletionItemKind.Text,
-      detail: `${detailTag}${def.decorator} — ${basename}:${def.line}`,
-      documentation: {
-        kind: 'markdown',
-        value: def.isRegex
-          ? `**${def.decorator}** *(regex)*\n\`\`\`regex\n${def.pattern}\n\`\`\`\n*Defined in ${def.file}:${def.line}*`
-          : `**${def.decorator}**\n\`\`\`\n${def.pattern}\n\`\`\`\n*Defined in ${def.file}:${def.line}*`,
-      },
-      sortText: String(index).padStart(6, '0'),
-      insertText: displayLabel,
-    };
-  });
+  return buildCompletionItems(linePrefix, stepDefinitions);
 });
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
