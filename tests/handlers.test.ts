@@ -1,8 +1,14 @@
-import { DiagnosticSeverity, CompletionItemKind, MarkupKind } from 'vscode-languageserver/node';
+import {
+  DiagnosticSeverity,
+  CompletionItemKind,
+  MarkupKind,
+  SymbolKind,
+} from 'vscode-languageserver/node';
 
 import {
   buildCompletionItems,
   computeDiagnostics,
+  computeDocumentSymbols,
   resolveDefinitionLink,
   resolveHover,
 } from '../server/src/handlers';
@@ -257,5 +263,193 @@ describe('resolveHover', () => {
     const hover = resolveHover('    Given I have <count> items in my cart', 5, [d]);
     expect(hover).not.toBeNull();
     expect((hover!.contents as { value: string }).value).toContain('I have {count:d} items in my cart');
+  });
+});
+
+// ── computeDocumentSymbols ───────────────────────────────────────────────────
+
+describe('computeDocumentSymbols', () => {
+  it('returns no symbols for an empty document', () => {
+    expect(computeDocumentSymbols('')).toEqual([]);
+  });
+
+  it('returns no symbols when there are no Gherkin constructs', () => {
+    expect(computeDocumentSymbols('# just a comment\n\n')).toEqual([]);
+  });
+
+  it('produces Feature → Scenario → Step hierarchy', () => {
+    const text = [
+      'Feature: My feature',
+      '  Scenario: Add items',
+      '    Given I have 5 items',
+      '    When I add 3 more',
+      '    Then I have 8 items',
+    ].join('\n');
+
+    const [feature] = computeDocumentSymbols(text);
+    expect(feature.name).toBe('My feature');
+    expect(feature.detail).toBe('Feature');
+    expect(feature.kind).toBe(SymbolKind.Class);
+    expect(feature.children).toHaveLength(1);
+
+    const scenario = feature.children![0];
+    expect(scenario.name).toBe('Add items');
+    expect(scenario.kind).toBe(SymbolKind.Method);
+    expect(scenario.children!.map((c) => c.name)).toEqual([
+      'I have 5 items',
+      'I add 3 more',
+      'I have 8 items',
+    ]);
+    expect(scenario.children!.every((c) => c.kind === SymbolKind.String)).toBe(true);
+  });
+
+  it('nests Scenarios under their enclosing Rule', () => {
+    const text = [
+      'Feature: My feature',
+      '  Scenario: Before any rule',
+      '    Given a step',
+      '  Rule: Rule A',
+      '    Scenario: In rule A',
+      '      Given a step',
+      '  Rule: Rule B',
+      '    Scenario: In rule B',
+      '      Given a step',
+    ].join('\n');
+
+    const [feature] = computeDocumentSymbols(text);
+    expect(feature.children!.map((c) => c.name)).toEqual([
+      'Before any rule',
+      'Rule A',
+      'Rule B',
+    ]);
+    const [, ruleA, ruleB] = feature.children!;
+    expect(ruleA.kind).toBe(SymbolKind.Namespace);
+    expect(ruleA.children!.map((c) => c.name)).toEqual(['In rule A']);
+    expect(ruleB.children!.map((c) => c.name)).toEqual(['In rule B']);
+  });
+
+  it('treats Background as a Scenario-level container with its own steps', () => {
+    const text = [
+      'Feature: F',
+      '  Background:',
+      '    Given a precondition',
+      '  Scenario: One',
+      '    Then it works',
+    ].join('\n');
+
+    const [feature] = computeDocumentSymbols(text);
+    const [bg, scenario] = feature.children!;
+    expect(bg.name).toBe('Background');
+    expect(bg.kind).toBe(SymbolKind.Constructor);
+    expect(bg.children!.map((c) => c.name)).toEqual(['a precondition']);
+    expect(scenario.children!.map((c) => c.name)).toEqual(['it works']);
+  });
+
+  it('captures Scenario Outline and its Examples block', () => {
+    const text = [
+      'Feature: F',
+      '  Scenario Outline: math',
+      '    Given <a> plus <b>',
+      '    Examples:',
+      '      | a | b |',
+      '      | 1 | 2 |',
+    ].join('\n');
+
+    const [feature] = computeDocumentSymbols(text);
+    const outline = feature.children![0];
+    expect(outline.detail).toMatch(/Scenario\s+Outline/i);
+    expect(outline.kind).toBe(SymbolKind.Method);
+    expect(outline.children!.map((c) => c.name)).toEqual(['<a> plus <b>', 'Examples']);
+    const examples = outline.children![1];
+    expect(examples.kind).toBe(SymbolKind.Array);
+    // Examples range should extend through the trailing table rows
+    expect(examples.range.end.line).toBe(5);
+  });
+
+  it('ignores tags, comments, and blank lines while still including them in ranges', () => {
+    const text = [
+      'Feature: F',
+      '',
+      '  # a comment',
+      '  @smoke @web',
+      '  Scenario: Tagged',
+      '    Given x',
+    ].join('\n');
+
+    const [feature] = computeDocumentSymbols(text);
+    expect(feature.children).toHaveLength(1);
+    const scenario = feature.children![0];
+    expect(scenario.name).toBe('Tagged');
+    // Scenario declared on line 4 (0-based)
+    expect(scenario.range.start.line).toBe(4);
+    expect(scenario.children!.map((c) => c.name)).toEqual(['x']);
+  });
+
+  it('does not pick up Gherkin keywords appearing inside a doc-string', () => {
+    const text = [
+      'Feature: F',
+      '  Scenario: docstring',
+      '    Given a step',
+      '      """',
+      '      Scenario: not a real one',
+      '      Given fake step',
+      '      """',
+    ].join('\n');
+
+    const [feature] = computeDocumentSymbols(text);
+    expect(feature.children).toHaveLength(1);
+    const scenario = feature.children![0];
+    // Only the real "a step" should appear; the docstring content is absorbed
+    expect(scenario.children!.map((c) => c.name)).toEqual(['a step']);
+  });
+
+  it('uses the keyword as name when the scenario title is blank', () => {
+    const text = [
+      'Feature:',
+      '  Background:',
+      '    Given x',
+    ].join('\n');
+    const [feature] = computeDocumentSymbols(text);
+    expect(feature.name).toBe('Feature');
+    expect(feature.children![0].name).toBe('Background');
+  });
+
+  it('extends a parent\'s range to include all descendant lines', () => {
+    const text = [
+      'Feature: F',           // line 0
+      '  Scenario: A',        // line 1
+      '    Given step 1',     // line 2
+      '    Then step 2',      // line 3
+      '  Scenario: B',        // line 4
+      '    Given step 3',     // line 5
+    ].join('\n');
+
+    const [feature] = computeDocumentSymbols(text);
+    const [a, b] = feature.children!;
+    expect(a.range.start.line).toBe(1);
+    expect(a.range.end.line).toBe(3);     // ends before next Scenario
+    expect(b.range.start.line).toBe(4);
+    expect(b.range.end.line).toBe(5);     // last line of document
+    expect(feature.range.end.line).toBe(5);
+  });
+
+  it('places selectionRange inside range and on the declaration line', () => {
+    const text = '   Scenario: Hello\n    Given x';
+    const [scenario] = computeDocumentSymbols(text);
+    expect(scenario.selectionRange.start).toEqual({ line: 0, character: 3 });
+    expect(scenario.selectionRange.end.line).toBe(0);
+    // selectionRange must be contained by range
+    expect(scenario.selectionRange.start.line).toBeGreaterThanOrEqual(scenario.range.start.line);
+    expect(scenario.selectionRange.end.line).toBeLessThanOrEqual(scenario.range.end.line);
+  });
+
+  it('supports the * step keyword', () => {
+    const text = [
+      'Feature: F',
+      '  Scenario: S',
+      '    * a generic step',
+    ].join('\n');
+    const [feature] = computeDocumentSymbols(text);
+    expect(feature.children![0].children!.map((c) => c.name)).toEqual(['a generic step']);
   });
 });

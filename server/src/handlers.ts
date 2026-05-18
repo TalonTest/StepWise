@@ -12,10 +12,12 @@ import {
   CompletionItemKind,
   Diagnostic,
   DiagnosticSeverity,
+  DocumentSymbol,
   Hover,
   LocationLink,
   MarkupKind,
   Range,
+  SymbolKind,
 } from 'vscode-languageserver/node';
 
 import {
@@ -175,4 +177,227 @@ export function resolveDefinitionLink(
     targetRange: { start: targetPos, end: targetPos },
     targetSelectionRange: { start: targetPos, end: targetPos },
   }];
+}
+
+// ─── Document symbols ────────────────────────────────────────────────────────
+
+const FEATURE_DECL_RE  = /^(\s*)(Feature|Rule)(\s*:)(\s*)(.*)$/i;
+const SCENARIO_DECL_RE =
+  /^(\s*)(Background|Scenario\s+Outline|Scenario\s+Template|Scenario|Example)(\s*:)(\s*)(.*)$/i;
+const EXAMPLES_DECL_RE = /^(\s*)(Examples|Scenarios)(\s*:)(\s*)(.*)$/i;
+const STEP_DECL_RE     = /^(\s*)(Given|When|Then|And|But|\*)(\s+)(.+?)\s*$/i;
+
+type ScenarioVariant = 'background' | 'scenario' | 'scenarioOutline' | 'example';
+type BlockKind = 'feature' | 'rule' | 'scenario' | 'step' | 'examples';
+
+interface RawBlock {
+  kind: BlockKind;
+  scenarioVariant?: ScenarioVariant;
+  line: number;
+  keyword: string;
+  name: string;
+  selectionStart: number;
+  selectionEnd: number;
+  /** Lower value = encloses more. Used to compute end-of-range. */
+  precedence: 0 | 1 | 2 | 3;
+}
+
+function parseLineToBlock(raw: string, lineIdx: number): RawBlock | null {
+  const trimmed = raw.trim();
+  if (
+    !trimmed ||
+    trimmed.startsWith('#') ||
+    trimmed.startsWith('@') ||
+    trimmed.startsWith('|')
+  ) {
+    return null;
+  }
+
+  const selectionStart = raw.length - raw.trimStart().length;
+  const selectionEnd   = raw.trimEnd().length;
+
+  let m: RegExpExecArray | null;
+
+  if ((m = FEATURE_DECL_RE.exec(raw))) {
+    const keyword = m[2];
+    const isRule  = keyword.toLowerCase() === 'rule';
+    return {
+      kind: isRule ? 'rule' : 'feature',
+      line: lineIdx,
+      keyword,
+      name: m[5].trim() || keyword,
+      selectionStart,
+      selectionEnd,
+      precedence: isRule ? 1 : 0,
+    };
+  }
+
+  if ((m = SCENARIO_DECL_RE.exec(raw))) {
+    const keyword = m[2];
+    const lower   = keyword.toLowerCase().replace(/\s+/g, ' ');
+    const variant: ScenarioVariant =
+      lower === 'background' ? 'background' :
+      lower === 'scenario outline' || lower === 'scenario template' ? 'scenarioOutline' :
+      lower === 'example' ? 'example' :
+      'scenario';
+    return {
+      kind: 'scenario',
+      scenarioVariant: variant,
+      line: lineIdx,
+      keyword,
+      name: m[5].trim() || keyword,
+      selectionStart,
+      selectionEnd,
+      precedence: 2,
+    };
+  }
+
+  if ((m = EXAMPLES_DECL_RE.exec(raw))) {
+    const keyword = m[2];
+    return {
+      kind: 'examples',
+      line: lineIdx,
+      keyword,
+      name: m[5].trim() || keyword,
+      selectionStart,
+      selectionEnd,
+      precedence: 3,
+    };
+  }
+
+  if ((m = STEP_DECL_RE.exec(raw))) {
+    const keyword = m[2];
+    return {
+      kind: 'step',
+      line: lineIdx,
+      keyword,
+      name: m[4].trim(),
+      selectionStart,
+      selectionEnd,
+      precedence: 3,
+    };
+  }
+
+  return null;
+}
+
+function symbolKindFor(block: RawBlock): SymbolKind {
+  switch (block.kind) {
+    case 'feature':  return SymbolKind.Class;
+    case 'rule':     return SymbolKind.Namespace;
+    case 'examples': return SymbolKind.Array;
+    case 'step':     return SymbolKind.String;
+    case 'scenario':
+      return block.scenarioVariant === 'background'
+        ? SymbolKind.Constructor
+        : SymbolKind.Method;
+  }
+}
+
+/**
+ * Build a DocumentSymbol hierarchy for a Gherkin feature file.
+ *
+ * Structure produced:
+ *   Feature (Class)
+ *     Rule (Namespace)        — optional
+ *       Background (Constructor) / Scenario (Method) / Scenario Outline (Method)
+ *         step (String)
+ *         Examples (Array)    — for outlines
+ *     Background / Scenario / Scenario Outline (when no Rule)
+ *       step
+ *       Examples
+ *
+ * Tag lines, comments, blank lines, doc-strings and data tables are skipped
+ * during block detection but absorbed into the containing block's range so the
+ * Outline panel highlights the right section as the cursor moves.
+ */
+export function computeDocumentSymbols(text: string): DocumentSymbol[] {
+  const lines = text.split('\n');
+  const blocks: RawBlock[] = [];
+
+  let inDocString    = false;
+  let docStringDelim = '';
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw     = lines[i];
+    const trimmed = raw.trim();
+
+    if (inDocString) {
+      if (trimmed === docStringDelim) inDocString = false;
+      continue;
+    }
+    if (trimmed.startsWith('"""') || trimmed.startsWith('```')) {
+      inDocString    = true;
+      docStringDelim = trimmed.startsWith('"""') ? '"""' : '```';
+      continue;
+    }
+
+    const block = parseLineToBlock(raw, i);
+    if (block) blocks.push(block);
+  }
+
+  // For block i, its range ends just before the next block whose precedence
+  // is ≤ block i's (i.e., a sibling-or-higher boundary). Anything in between
+  // — description text, tags, doc-strings, data tables — belongs to block i.
+  const endLineFor = (i: number): number => {
+    const me = blocks[i];
+    for (let j = i + 1; j < blocks.length; j++) {
+      if (blocks[j].precedence <= me.precedence) {
+        return Math.max(blocks[j].line - 1, me.line);
+      }
+    }
+    return Math.max(lines.length - 1, me.line);
+  };
+
+  const makeSymbol = (i: number): DocumentSymbol => {
+    const block   = blocks[i];
+    const endLine = endLineFor(i);
+    const endChar = (lines[endLine] ?? '').length;
+
+    return {
+      name: block.name,
+      detail: block.keyword,
+      kind: symbolKindFor(block),
+      range: {
+        start: { line: block.line, character: 0 },
+        end:   { line: endLine,   character: endChar },
+      },
+      selectionRange: {
+        start: { line: block.line, character: block.selectionStart },
+        end:   { line: block.line, character: block.selectionEnd   },
+      },
+      children: [],
+    };
+  };
+
+  const roots: DocumentSymbol[] = [];
+  let currentFeature:  DocumentSymbol | undefined;
+  let currentRule:     DocumentSymbol | undefined;
+  let currentScenario: DocumentSymbol | undefined;
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const sym   = makeSymbol(i);
+
+    if (block.kind === 'feature') {
+      roots.push(sym);
+      currentFeature  = sym;
+      currentRule     = undefined;
+      currentScenario = undefined;
+    } else if (block.kind === 'rule') {
+      (currentFeature?.children ?? roots).push(sym);
+      currentRule     = sym;
+      currentScenario = undefined;
+    } else if (block.kind === 'scenario') {
+      const parent = currentRule ?? currentFeature;
+      (parent?.children ?? roots).push(sym);
+      currentScenario = sym;
+    } else {
+      // step or examples
+      const parent = currentScenario ?? currentRule ?? currentFeature;
+      (parent?.children ?? roots).push(sym);
+    }
+  }
+
+  return roots;
 }

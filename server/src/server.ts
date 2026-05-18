@@ -27,6 +27,8 @@ import {
   CompletionItem,
   TextDocumentPositionParams,
   DefinitionParams,
+  DocumentSymbol,
+  DocumentSymbolParams,
   Hover,
   HoverParams,
   LocationLink,
@@ -49,6 +51,7 @@ import {
 import {
   buildCompletionItems,
   computeDiagnostics,
+  computeDocumentSymbols,
   pathToUri,
   resolveDefinitionLink,
   resolveHover,
@@ -332,6 +335,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
         full: true,
       },
       documentFormattingProvider: true,
+      documentSymbolProvider: true,
     },
     serverInfo: {
       name: 'stepwise',
@@ -491,6 +495,16 @@ connection.onDocumentFormatting((params: DocumentFormattingParams): TextEdit[] |
     ),
   ];
 });
+
+// ─── Document symbols (Outline panel) ─────────────────────────────────────────
+
+connection.onDocumentSymbol(
+  (params: DocumentSymbolParams): DocumentSymbol[] | null => {
+    const doc = documents.get(params.textDocument.uri);
+    if (!doc || !doc.uri.endsWith('.feature')) return null;
+    return computeDocumentSymbols(doc.getText());
+  },
+);
 
 // ─── Document listeners ───────────────────────────────────────────────────────
 
