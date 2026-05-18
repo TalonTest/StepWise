@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-18
+
+### Added
+- Document outline support for `.feature` files: the VS Code Outline panel and "Go to Symbol" picker now show a Feature → Rule → Scenario / Background / Scenario Outline → step hierarchy, with `Examples` blocks nested under their outline ([#48](https://github.com/TalonTest/StepWise/pull/48))
+- Recognition of `Scenario Template`, `Example` (singular), and `Scenarios` keywords alongside their primary aliases when computing document symbols
+- Symbol ranges extend through tag lines, comments, doc-strings, and data tables so the Outline panel highlights the correct block as the cursor moves
+
 ## [0.5.0] - 2026-05-12
 
 ### Added
@@ -64,7 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Formatter not recognized in marketplace installs: bundled server dependencies with esbuild so the extension is fully self-contained ([#2](https://github.com/ntibbenlembke/stepwise/issues/2))
 
-[Unreleased]: https://github.com/ntibbenlembke/stepwise/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/ntibbenlembke/stepwise/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.2.0...v0.3.0
