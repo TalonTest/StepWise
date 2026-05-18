@@ -181,10 +181,13 @@ export function resolveDefinitionLink(
 
 // ─── Document symbols ────────────────────────────────────────────────────────
 
-const FEATURE_DECL_RE  = /^(\s*)(Feature|Rule)(\s*:)(\s*)(.*)$/i;
+// Trailing `\s*` before `$` is essential on CRLF files: `text.split('\n')`
+// leaves a `\r` on each line, and JS regex `.` does not match `\r`, so a bare
+// `(.*)$` silently fails on Windows-authored feature files.
+const FEATURE_DECL_RE  = /^(\s*)(Feature|Rule)(\s*:)(\s*)(.*?)\s*$/i;
 const SCENARIO_DECL_RE =
-  /^(\s*)(Background|Scenario\s+Outline|Scenario\s+Template|Scenario|Example)(\s*:)(\s*)(.*)$/i;
-const EXAMPLES_DECL_RE = /^(\s*)(Examples|Scenarios)(\s*:)(\s*)(.*)$/i;
+  /^(\s*)(Background|Scenario\s+Outline|Scenario\s+Template|Scenario|Example)(\s*:)(\s*)(.*?)\s*$/i;
+const EXAMPLES_DECL_RE = /^(\s*)(Examples|Scenarios)(\s*:)(\s*)(.*?)\s*$/i;
 const STEP_DECL_RE     = /^(\s*)(Given|When|Then|And|But|\*)(\s+)(.+?)\s*$/i;
 
 type ScenarioVariant = 'background' | 'scenario' | 'scenarioOutline' | 'example';

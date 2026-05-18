@@ -452,4 +452,26 @@ describe('computeDocumentSymbols', () => {
     const [feature] = computeDocumentSymbols(text);
     expect(feature.children![0].children!.map((c) => c.name)).toEqual(['a generic step']);
   });
+
+  it('parses CRLF-terminated lines (Windows-authored files)', () => {
+    const text = [
+      'Feature: My feature',
+      '  Scenario Outline: Outline',
+      '    Given <a>',
+      '    Examples:',
+      '      | a |',
+      '      | 1 |',
+    ].join('\r\n');
+
+    const [feature] = computeDocumentSymbols(text);
+    expect(feature.name).toBe('My feature');
+    expect(feature.detail).toBe('Feature');
+    const outline = feature.children![0];
+    expect(outline.name).toBe('Outline');
+    expect(outline.detail).toMatch(/Scenario\s+Outline/i);
+    expect(outline.children!.map((c) => c.name)).toEqual(['<a>', 'Examples']);
+    // Names must not carry a trailing \r
+    expect(feature.name.endsWith('\r')).toBe(false);
+    expect(outline.name.endsWith('\r')).toBe(false);
+  });
 });
