@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Formatter now right-aligns data table columns whose cells are all numeric (Cucumber/Excel convention) and left-aligns text columns; the header row is excluded from the numeric check so a text label above numbers still right-aligns ([#27](https://github.com/TalonTest/StepWise/issues/27), [#53](https://github.com/TalonTest/StepWise/pull/53))
 
+### Changed
+- Table formatter now right-aligns columns whose data cells are all numeric (Cucumber/Excel convention) and left-aligns text columns; the header row is excluded from the numeric check so a text label above numbers still yields a right-aligned column
+
 ## [0.6.0] - 2026-05-18
 
 ### Added

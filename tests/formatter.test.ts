@@ -148,8 +148,58 @@ describe('table alignment', () => {
   });
 
   it('handles a table that is already aligned (idempotent)', () => {
-    const preFormatted = '      | count |\n      | 1     |\n      | 10    |\n';
+    // Numeric columns are right-aligned, so the data cells pad on the left.
+    const preFormatted = '      | count |\n      |     1 |\n      |    10 |\n';
     expect(fmt(preFormatted)).toBe(preFormatted);
+  });
+});
+
+// ── Numeric column alignment ───────────────────────────────────────────────────
+
+describe('numeric column alignment', () => {
+  const cellsOf = (text: string) =>
+    fmt(text)
+      .split('\n')
+      .filter(l => l.trim().startsWith('|'))
+      .map(l => l.trim().split('|').slice(1, -1));
+
+  it('right-aligns a column whose data cells are all numeric', () => {
+    const rows = cellsOf('| age |\n| 1 |\n| 100 |\n');
+    expect(rows[1][0]).toBe('   1 '); // padded on the left
+    expect(rows[2][0]).toBe(' 100 ');
+  });
+
+  it('left-aligns a text column even with a numeric-looking header', () => {
+    const rows = cellsOf('| 2024 |\n| Alice |\n| Bob |\n');
+    expect(rows[1][0]).toBe(' Alice ');
+    expect(rows[2][0]).toBe(' Bob   '); // padded on the right
+  });
+
+  it('aligns each column independently', () => {
+    const rows = cellsOf('| name | age |\n| Alice | 30 |\n| Bob | 100 |\n');
+    // name column: left-aligned text
+    expect(rows[1][0]).toBe(' Alice ');
+    expect(rows[2][0]).toBe(' Bob   ');
+    // age column: right-aligned numbers
+    expect(rows[1][1]).toBe('  30 ');
+    expect(rows[2][1]).toBe(' 100 ');
+  });
+
+  it('treats negative and decimal values as numeric', () => {
+    const rows = cellsOf('| delta |\n| -1 |\n| 2.5 |\n');
+    expect(rows[1][0]).toBe('    -1 '); // padded to width of "delta"
+    expect(rows[2][0]).toBe('   2.5 ');
+  });
+
+  it('left-aligns a column with a mix of numeric and text data', () => {
+    const rows = cellsOf('| value |\n| 10 |\n| n/a |\n');
+    expect(rows[1][0]).toBe(' 10    ');
+    expect(rows[2][0]).toBe(' n/a   ');
+  });
+
+  it('also right-aligns the header of a numeric column', () => {
+    const rows = cellsOf('| n |\n| 1000 |\n');
+    expect(rows[0][0]).toBe('    n '); // header padded on the left
   });
 });
 
