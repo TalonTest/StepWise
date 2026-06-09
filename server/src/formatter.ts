@@ -8,7 +8,8 @@
  *   3×  Table rows (| … |), doc-string delimiters (""" / ```)
  *
  * Tags and comments inherit the indent of the next anchor line.
- * Table columns are padded so all pipes align.
+ * Table columns are padded so all pipes align; columns whose data cells are
+ * all numeric are right-aligned (Cucumber/Excel convention), others left.
  * Multiple consecutive blank lines are collapsed to one.
  * Doc-string content is passed through verbatim (only delimiters are re-indented).
  */
@@ -126,9 +127,16 @@ function anchorIndent(anchor: string, unit: string): string {
   return '';
 }
 
+/** A cell is numeric if it's an optionally-signed integer or decimal. */
+const NUMERIC_CELL = /^-?\d+(\.\d+)?$/;
+
 /**
  * Re-render a group of `| cell | cell |` rows so every column is the same width.
- * Each cell is padded with a single space on each side.
+ * Each cell is padded with a single space on each side. Columns whose data cells
+ * (every row after the header) are all numeric are right-aligned to match the
+ * Cucumber/Excel convention; all other columns are left-aligned. The header row
+ * is excluded from the numeric check so a text label like "age" above numbers
+ * still yields a right-aligned column.
  */
 function alignTable(rows: string[]): string[] {
   // Split each row into trimmed cells (drop the leading/trailing empty strings
@@ -142,9 +150,19 @@ function alignTable(rows: string[]): string[] {
     Math.max(...parsed.map(r => (r[c] ?? '').length)),
   );
 
+  const dataRows   = parsed.slice(1);
+  const rightAlign = Array.from({ length: numCols }, (_, c) =>
+    dataRows.length > 0 &&
+    dataRows.every(r => NUMERIC_CELL.test(r[c] ?? '')),
+  );
+
   return parsed.map(cells =>
-    '|' + Array.from({ length: numCols }, (_, c) =>
-      ` ${(cells[c] ?? '').padEnd(widths[c])} `,
-    ).join('|') + '|',
+    '|' + Array.from({ length: numCols }, (_, c) => {
+      const value  = cells[c] ?? '';
+      const padded = rightAlign[c]
+        ? value.padStart(widths[c])
+        : value.padEnd(widths[c]);
+      return ` ${padded} `;
+    }).join('|') + '|',
   );
 }
