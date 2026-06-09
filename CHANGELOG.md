@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `stepwise.featurePaths` setting to scope diagnostics and `.feature` file watching to specific directories — useful in large monorepos to reduce noise and startup time. Leave empty to use the entire workspace ([#26](https://github.com/TalonTest/StepWise/issues/26))
 
+### Changed
+- Table formatter now right-aligns columns whose data cells are all numeric (Cucumber/Excel convention) and left-aligns text columns; the header row is excluded from the numeric check so a text label above numbers still yields a right-aligned column
+
 ## [0.6.0] - 2026-05-18
 
 ### Added
