@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-09
+
 ### Added
-- `stepwise.featurePaths` setting to scope diagnostics and `.feature` file watching to specific directories — useful in large monorepos to reduce noise and startup time. Leave empty to use the entire workspace ([#26](https://github.com/TalonTest/StepWise/issues/26))
+- `stepwise.featurePaths` setting to scope diagnostics and `.feature` file watching to specific directories — useful in large monorepos to reduce noise and startup time. Leave empty to use the entire workspace ([#26](https://github.com/TalonTest/StepWise/issues/26), [#52](https://github.com/TalonTest/StepWise/pull/52))
+
+### Changed
+- Formatter now right-aligns data table columns whose cells are all numeric (Cucumber/Excel convention) and left-aligns text columns; the header row is excluded from the numeric check so a text label above numbers still right-aligns ([#27](https://github.com/TalonTest/StepWise/issues/27), [#53](https://github.com/TalonTest/StepWise/pull/53))
 
 ## [0.6.0] - 2026-05-18
 
@@ -74,7 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Formatter not recognized in marketplace installs: bundled server dependencies with esbuild so the extension is fully self-contained ([#2](https://github.com/ntibbenlembke/stepwise/issues/2))
 
-[Unreleased]: https://github.com/ntibbenlembke/stepwise/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ntibbenlembke/stepwise/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ntibbenlembke/stepwise/compare/v0.3.0...v0.4.0
