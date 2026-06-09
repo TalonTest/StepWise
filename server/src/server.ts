@@ -68,6 +68,10 @@ let workspaceFolderPaths: string[] = [];
 let stepDefinitions: StepDefinition[] = [];
 let extensionPath: string | undefined;
 
+// Resolved absolute directories that scope diagnostics to feature files within
+// them. Empty means "no restriction" — the entire workspace is in scope.
+let featureRoots: string[] = [];
+
 // Track whether the client supports dynamic file-watcher registration
 let supportsDynamicWatchers = false;
 
@@ -75,6 +79,7 @@ let supportsDynamicWatchers = false;
 
 interface StepWiseConfig {
   stepDefinitionPaths: string[];
+  featurePaths: string[];
   pythonPath: string;
 }
 
@@ -82,8 +87,40 @@ async function getConfig(): Promise<StepWiseConfig> {
   const raw = await connection.workspace.getConfiguration('stepwise');
   return {
     stepDefinitionPaths: Array.isArray(raw?.stepDefinitionPaths) ? raw.stepDefinitionPaths : [],
+    featurePaths: Array.isArray(raw?.featurePaths) ? raw.featurePaths : [],
     pythonPath: typeof raw?.pythonPath === 'string' ? raw.pythonPath.trim() : '',
   };
+}
+
+/**
+ * Resolve configured directory paths against the open workspace folders.
+ * Relative entries are joined to each workspace root; absolute entries are
+ * used as-is. When `requireExists` is true, entries that don't exist on disk
+ * are dropped (with a warning) — appropriate for directories we need to walk.
+ */
+function resolveConfiguredRoots(
+  paths: string[],
+  label: string,
+  requireExists: boolean,
+): string[] {
+  const roots: string[] = [];
+  for (const folder of workspaceFolderPaths) {
+    for (const p of paths) {
+      const resolved = path.isAbsolute(p) ? p : path.join(folder, p);
+      if (!requireExists || fs.existsSync(resolved)) {
+        roots.push(resolved);
+      } else {
+        connection.console.warn(`[stepwise] ${label} entry not found: ${resolved}`);
+      }
+    }
+  }
+  return roots;
+}
+
+/** Whether `file` is the same as, or nested inside, `root`. */
+function isWithin(file: string, root: string): boolean {
+  const rel = path.relative(root, file);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
 // ─── Semantic token legend ────────────────────────────────────────────────────
@@ -252,23 +289,16 @@ function runStepParser(pythonFiles: string[], pythonPath?: string): Promise<Step
 async function refreshStepDefinitions(): Promise<void> {
   const config = await getConfig();
 
+  // Diagnostics are limited to feature files inside these directories. An empty
+  // list leaves the whole workspace in scope (the default).
+  featureRoots = resolveConfiguredRoots(config.featurePaths, 'featurePaths', false);
+
   // Resolve search roots: configured paths (relative to each workspace root, or
   // absolute) take priority; fall back to the workspace roots themselves.
-  const searchRoots: string[] = [];
-  if (config.stepDefinitionPaths.length > 0) {
-    for (const folder of workspaceFolderPaths) {
-      for (const p of config.stepDefinitionPaths) {
-        const resolved = path.isAbsolute(p) ? p : path.join(folder, p);
-        if (fs.existsSync(resolved)) {
-          searchRoots.push(resolved);
-        } else {
-          connection.console.warn(`[stepwise] stepDefinitionPaths entry not found: ${resolved}`);
-        }
-      }
-    }
-  } else {
-    searchRoots.push(...workspaceFolderPaths);
-  }
+  const searchRoots: string[] =
+    config.stepDefinitionPaths.length > 0
+      ? resolveConfiguredRoots(config.stepDefinitionPaths, 'stepDefinitionPaths', true)
+      : [...workspaceFolderPaths];
 
   const allPyFiles: string[] = [];
   for (const root of searchRoots) {
@@ -297,6 +327,18 @@ async function refreshStepDefinitions(): Promise<void> {
 
 function validateDocument(doc: TextDocument): void {
   if (!doc.uri.endsWith('.feature')) return;
+
+  // When featurePaths is configured, only feature files within those
+  // directories receive diagnostics. Clear any stale diagnostics for files
+  // that fall outside the configured scope.
+  if (featureRoots.length > 0) {
+    const filePath = uriToPath(doc.uri);
+    if (!featureRoots.some((root) => isWithin(filePath, root))) {
+      connection.sendDiagnostics({ uri: doc.uri, diagnostics: [] });
+      return;
+    }
+  }
+
   const diagnostics = computeDiagnostics(doc.getText(), stepDefinitions);
   connection.sendDiagnostics({ uri: doc.uri, diagnostics });
 }

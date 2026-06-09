@@ -44,12 +44,14 @@ npm run build
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `stepwise.stepDefinitionPaths` | `string[]` | `[]` | Directories to search for step definitions, relative to each workspace root or absolute. Leave empty to search the entire workspace. |
+| `stepwise.featurePaths` | `string[]` | `[]` | Directories that contain `.feature` files, relative to each workspace root or absolute. Scopes diagnostics and file watching to these directories — useful in large monorepos. Leave empty to use the entire workspace. Changing this requires reloading the window. |
 | `stepwise.pythonPath` | `string` | `""` | Path to the Python 3 interpreter. Leave empty to auto-detect `python3` / `python` on `PATH`. |
 
 **Example** (`settings.json`):
 ```json
 {
   "stepwise.stepDefinitionPaths": ["tests/steps", "features/step_defs"],
+  "stepwise.featurePaths": ["features", "tests/acceptance"],
   "stepwise.pythonPath": "/usr/local/bin/python3"
 }
 ```

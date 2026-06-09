@@ -91,6 +91,14 @@
           "default": [],
           "markdownDescription": "Directories to search for step definition files (relative to each workspace root, or absolute). Leave empty to search the entire workspace.\n\nExample: `[\"tests/steps\", \"features/step_defs\"]`"
         },
+        "stepwise.featurePaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Directories that contain `.feature` files (relative to each workspace root, or absolute). Scopes diagnostics and file watching to these directories — useful in large monorepos to reduce noise and startup time. Leave empty to use the entire workspace.\n\nChanging this requires reloading the window.\n\nExample: `[\"features\", \"tests/acceptance\"]`"
+        },
         "stepwise.pythonPath": {
           "type": "string",
           "default": "",
